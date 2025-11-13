@@ -244,3 +244,246 @@ class ArtRestorer:
         except Exception as e:
             logger.warning(f"Detail enhancement failed: {str(e)}")
             return image
+
+    def super_resolution(self, image_path, scale=2):
+        """
+        Apply super resolution to increase image resolution
+
+        Args:
+            image_path: Path to input image
+            scale: Upscaling factor (2 or 4)
+
+        Returns:
+            Super-resolved image as numpy array
+        """
+        try:
+            logger.info(f"Starting super resolution with scale: {scale}")
+
+            # Load image
+            image = self.image_processor.load_image(image_path)
+
+            # Use OpenCV's DNN Super Resolution (EDSR model)
+            sr = cv2.dnn_superres.DnnSuperResImpl_create()
+
+            # For now, use basic interpolation (in production, load pre-trained models)
+            h, w = image.shape[:2]
+            new_h, new_w = h * scale, w * scale
+
+            # Use Lanczos interpolation for high-quality upscaling
+            upscaled = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+
+            # Apply sharpening to enhance details
+            kernel = np.array([[-1,-1,-1],
+                             [-1, 9,-1],
+                             [-1,-1,-1]])
+            sharpened = cv2.filter2D(upscaled, -1, kernel * 0.5)
+
+            # Blend for natural look
+            result = cv2.addWeighted(upscaled, 0.7, sharpened, 0.3, 0)
+
+            # Apply bilateral filter to reduce artifacts
+            result = cv2.bilateralFilter(result, 5, 50, 50)
+
+            logger.info(f"Super resolution completed: {w}x{h} -> {new_w}x{new_h}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Super resolution failed: {str(e)}")
+            raise
+
+    def colorize(self, image_path):
+        """
+        Colorize black and white images
+
+        Args:
+            image_path: Path to input image
+
+        Returns:
+            Colorized image as numpy array
+        """
+        try:
+            logger.info("Starting colorization")
+
+            # Load image
+            image = self.image_processor.load_image(image_path)
+
+            # Check if image is grayscale or convert to grayscale
+            if len(image.shape) == 2:
+                gray = image
+            else:
+                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+            # Convert back to 3 channels
+            colored = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+
+            # Apply subtle color tinting for artistic effect
+            # In production, this would use a trained deep learning model
+            h, w = colored.shape[:2]
+
+            # Create color gradients for artistic colorization
+            sepia_kernel = np.array([[0.272, 0.534, 0.131],
+                                    [0.349, 0.686, 0.168],
+                                    [0.393, 0.769, 0.189]])
+
+            # Apply sepia tone
+            sepia = cv2.transform(colored, sepia_kernel)
+
+            # Blend with original for subtle effect
+            result = cv2.addWeighted(colored, 0.3, sepia, 0.7, 0)
+
+            # Enhance colors
+            result = self._restore_colors(result, level='medium')
+
+            logger.info("Colorization completed")
+            return result
+
+        except Exception as e:
+            logger.error(f"Colorization failed: {str(e)}")
+            raise
+
+    def style_transfer(self, image_path, style='classical'):
+        """
+        Apply artistic style transfer
+
+        Args:
+            image_path: Path to input image
+            style: Style to apply (classical, modern, impressionist)
+
+        Returns:
+            Styled image as numpy array
+        """
+        try:
+            logger.info(f"Starting style transfer: {style}")
+
+            # Load image
+            image = self.image_processor.load_image(image_path)
+
+            # Apply style-specific transformations
+            if style == 'classical':
+                result = self._apply_classical_style(image)
+            elif style == 'modern':
+                result = self._apply_modern_style(image)
+            elif style == 'impressionist':
+                result = self._apply_impressionist_style(image)
+            else:
+                result = image
+
+            logger.info("Style transfer completed")
+            return result
+
+        except Exception as e:
+            logger.error(f"Style transfer failed: {str(e)}")
+            raise
+
+    def _apply_classical_style(self, image):
+        """Apply classical painting style"""
+        # Reduce noise and smooth edges
+        smoothed = cv2.bilateralFilter(image, 9, 75, 75)
+
+        # Enhance colors
+        enhanced = self._restore_colors(smoothed, level='high')
+
+        # Add slight vignette effect
+        h, w = enhanced.shape[:2]
+        mask = np.zeros((h, w), dtype=np.float32)
+        cv2.ellipse(mask, (w//2, h//2), (w//2, h//2), 0, 0, 360, 1, -1)
+        mask = cv2.GaussianBlur(mask, (0, 0), w/4)
+
+        result = enhanced.copy()
+        for i in range(3):
+            result[:, :, i] = result[:, :, i] * mask
+
+        return np.clip(result, 0, 255).astype(np.uint8)
+
+    def _apply_modern_style(self, image):
+        """Apply modern art style"""
+        # Increase contrast and saturation
+        pil_image = Image.fromarray(image)
+
+        from PIL import ImageEnhance
+        enhancer = ImageEnhance.Contrast(pil_image)
+        contrasted = enhancer.enhance(1.3)
+
+        enhancer = ImageEnhance.Color(contrasted)
+        saturated = enhancer.enhance(1.5)
+
+        # Add edge enhancement
+        result = np.array(saturated)
+        edges = cv2.Canny(cv2.cvtColor(result, cv2.COLOR_RGB2GRAY), 50, 150)
+        edges_colored = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+
+        # Blend edges with image
+        result = cv2.addWeighted(result, 0.95, edges_colored, 0.05, 0)
+
+        return result
+
+    def _apply_impressionist_style(self, image):
+        """Apply impressionist painting style"""
+        # Apply oil painting effect
+        result = cv2.xphoto.oilPainting(image, 7, 1)
+
+        # Add brush stroke effect using morphological operations
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        dilated = cv2.dilate(result, kernel, iterations=1)
+        eroded = cv2.erode(dilated, kernel, iterations=1)
+
+        # Blend for impressionist effect
+        result = cv2.addWeighted(result, 0.6, eroded, 0.4, 0)
+
+        # Enhance colors slightly
+        result = self._restore_colors(result, level='medium')
+
+        return result
+
+    def detect_damage(self, image_path):
+        """
+        Detect damaged areas in artwork
+
+        Args:
+            image_path: Path to input image
+
+        Returns:
+            Dictionary with damage information and mask
+        """
+        try:
+            logger.info("Detecting damage in artwork")
+
+            # Load image
+            image = self.image_processor.load_image(image_path)
+
+            # Convert to grayscale
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+            # Detect very bright spots (tears, fading)
+            _, bright_mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY)
+
+            # Detect very dark spots (stains, damage)
+            _, dark_mask = cv2.threshold(gray, 15, 255, cv2.THRESH_BINARY_INV)
+
+            # Combine masks
+            damage_mask = cv2.bitwise_or(bright_mask, dark_mask)
+
+            # Calculate damage percentage
+            total_pixels = damage_mask.size
+            damaged_pixels = np.sum(damage_mask > 0)
+            damage_percentage = (damaged_pixels / total_pixels) * 100
+
+            # Detect scratches using edge detection
+            edges = cv2.Canny(gray, 50, 150)
+            scratches = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+
+            result = {
+                "damage_percentage": round(damage_percentage, 2),
+                "has_bright_spots": np.sum(bright_mask) > 0,
+                "has_dark_spots": np.sum(dark_mask) > 0,
+                "has_scratches": np.sum(scratches) > 100,
+                "damage_mask": damage_mask,
+                "scratch_mask": scratches,
+            }
+
+            logger.info(f"Damage detection completed: {damage_percentage:.2f}% damaged")
+            return result
+
+        except Exception as e:
+            logger.error(f"Damage detection failed: {str(e)}")
+            raise
