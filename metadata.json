@@ -1,0 +1,7 @@
+{
+  "name": "ReCoverify App",
+  "description": "A multi-functional application that allows users to edit images using text prompts and generate YouTube video covers. Now fully localized in Arabic (default) and English, with a reconfigured AI pipeline to support processing Arabic YouTube transcripts for high-quality, relevant cover art generation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
