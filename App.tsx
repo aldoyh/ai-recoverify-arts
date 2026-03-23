@@ -237,7 +237,7 @@ const App: React.FC = () => {
             }
 
             setGenerationStep(t.step2);
-            const summary = await summarizeTranscript(content, source);
+            const summary = await summarizeTranscript(content);
 
             setGenerationStep(t.step3);
             const artPrompt = await createImagePromptFromSummary(summary, useThumbnail);
@@ -326,7 +326,7 @@ const App: React.FC = () => {
                             rows={4}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            className="w-full bg-brand-red-900 border border-brand-red-600 rounded-lg p-3 focus:ring-2 focus:ring-white focus:border-white transition duration-200 placeholder-red-200/50 text-white resize-none"
+                            className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-white focus:border-white transition duration-200 placeholder-slate-200/50 text-white resize-none"
                             placeholder={t.editingPromptPlaceholder}
                             required
                         />
@@ -336,7 +336,7 @@ const App: React.FC = () => {
                 <button
                     type="submit"
                     disabled={isEditing || !imageFile || !prompt}
-                    className="w-full flex items-center justify-center bg-white hover:bg-red-100 disabled:bg-brand-red-700 disabled:text-red-400 disabled:cursor-not-allowed text-brand-red-700 font-bold py-3 px-4 rounded-lg transition duration-300 shadow-lg disabled:shadow-none"
+                    className="w-full flex items-center justify-center bg-white hover:bg-slate-100 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 font-bold py-3 px-4 rounded-lg transition duration-300 shadow-lg disabled:shadow-none"
                 >
                     {isEditing ? <LoadingSpinner text={t.loadingText} /> : t.generateEditButton}
                 </button>
@@ -355,7 +355,7 @@ const App: React.FC = () => {
                     type="url"
                     value={youtubeUrl}
                     onChange={(e) => setYoutubeUrl(e.target.value)}
-                    className="w-full bg-brand-red-900 border border-brand-red-600 rounded-lg p-3 focus:ring-2 focus:ring-white focus:border-white transition duration-200 placeholder-red-200/50 text-white"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-white focus:border-white transition duration-200 placeholder-slate-200/50 text-white"
                     placeholder={t.youtubeUrlPlaceholder}
                     required
                 />
@@ -366,7 +366,7 @@ const App: React.FC = () => {
                             type="checkbox"
                             checked={useThumbnail}
                             onChange={(e) => setUseThumbnail(e.target.checked)}
-                            className="w-4 h-4 text-brand-red-500 bg-brand-red-700 border-brand-red-600 rounded focus:ring-white"
+                            className="w-4 h-4 text-slate-500 bg-slate-700 border-slate-600 rounded focus:ring-white"
                         />
                         <label htmlFor="use-thumbnail" className="ms-2 text-sm font-medium text-red-100">{t.useThumbnailLabel}</label>
                     </div>
@@ -380,7 +380,7 @@ const App: React.FC = () => {
                  <button
                     type="submit"
                     disabled={isGenerating}
-                    className="w-full mt-6 flex items-center justify-center bg-white hover:bg-red-100 disabled:bg-brand-red-700 disabled:text-red-400 disabled:cursor-not-allowed text-brand-red-700 font-bold py-3 px-4 rounded-lg transition duration-300 shadow-lg disabled:shadow-none"
+                    className="w-full mt-6 flex items-center justify-center bg-white hover:bg-slate-100 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 font-bold py-3 px-4 rounded-lg transition duration-300 shadow-lg disabled:shadow-none"
                 >
                     {isGenerating ? <LoadingSpinner text={t.loadingText} /> : t.generateCoverButton}
                 </button>
@@ -396,18 +396,18 @@ const App: React.FC = () => {
                     onClick={handleToggleRecording}
                     disabled={isProcessingAudio}
                     className={`relative flex items-center justify-center w-24 h-24 rounded-full transition-all duration-300 ease-in-out shadow-lg focus:outline-none focus:ring-4 focus:ring-white/50 disabled:opacity-50 disabled:cursor-not-allowed
-                        ${isRecording ? 'bg-brand-red-500 hover:bg-brand-red-600 animate-pulse' : 'bg-white hover:bg-red-100'}`}
+                        ${isRecording ? 'bg-slate-500 hover:bg-slate-600 animate-pulse' : 'bg-white hover:bg-slate-100'}`}
                 >
                     {isRecording ? (
                         <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 5a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" clipRule="evenodd"></path></svg>
                     ) : (
-                       <svg className="w-10 h-10 text-brand-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                       <svg className="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
                     )}
                 </button>
                 <p className="mt-4 font-semibold text-red-100">
                     {isRecording ? t.stopButton : t.recordButton}
                 </p>
-                <div className="mt-6 w-full h-32 bg-brand-red-900/50 rounded-lg p-4 border border-brand-red-600 overflow-y-auto">
+                <div className="mt-6 w-full h-32 bg-slate-900/50 rounded-lg p-4 border border-slate-600 overflow-y-auto">
                     <p className="text-red-200 whitespace-pre-wrap">
                         {liveTranscript || <span className="text-red-200/50">{t.speakNow}</span>}
                     </p>
@@ -418,7 +418,7 @@ const App: React.FC = () => {
                  <section className="mt-8 animate-fade-in">
                       <div>
                         <h3 className="text-lg font-semibold text-red-100">{t.audioSummaryLabel}</h3>
-                        <p className="text-red-200 bg-brand-red-900/50 p-3 rounded-md mt-1">"{audioIdeas.summary}"</p>
+                        <p className="text-slate-200 bg-slate-900/50 p-3 rounded-md mt-1">"{audioIdeas.summary}"</p>
                     </div>
                      <div className="mt-4">
                         <h3 className="text-lg font-semibold text-red-100">{t.generatedIdeasLabel}</h3>
@@ -427,7 +427,7 @@ const App: React.FC = () => {
                                 <img key={index} src={imageSrc} alt={`Generated Idea ${index+1}`} className="rounded-lg shadow-lg w-full aspect-video object-cover" />
                             ))}
                         </div>
-                         <p className="text-red-200 bg-brand-red-900/50 p-3 rounded-md mt-3 italic text-sm">{t.promptLabel}: "{audioIdeas.prompt}"</p>
+                         <p className="text-slate-200 bg-slate-900/50 p-3 rounded-md mt-3 italic text-sm">{t.promptLabel}: "{audioIdeas.prompt}"</p>
                     </div>
                  </section>
              )}
@@ -435,13 +435,13 @@ const App: React.FC = () => {
     );
 
     return (
-        <div className="bg-brand-red-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-red-700 to-brand-red-900 min-h-screen text-white font-sans flex flex-col items-center p-4 sm:p-6 md:p-8">
+        <div className="bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-700 to-slate-900 min-h-screen text-white font-sans flex flex-col items-center p-4 sm:p-6 md:p-8">
             <div className="w-full max-w-4xl">
                  <header className="text-center mb-8 relative">
                     <div className="absolute top-0 start-0">
                         <button
                             onClick={toggleLanguage}
-                            className="bg-brand-red-800/50 hover:bg-brand-red-700/50 text-white font-semibold py-2 px-4 rounded-lg transition duration-300"
+                            className="bg-slate-800/50 hover:bg-slate-700/50 text-white font-semibold py-2 px-4 rounded-lg transition duration-300"
                         >
                             {/* FIX: Simplified to use the consistent 'toggleLanguage' key, resolving the TypeScript error. */}
                             {t.toggleLanguage}
@@ -450,18 +450,18 @@ const App: React.FC = () => {
                     <h1 className="text-4xl md:text-5xl font-bold text-white">
                         {t.appTitle}
                     </h1>
-                    <p className="text-red-200 mt-2 text-lg">
+                    <p className="text-slate-200 mt-2 text-lg">
                         {t.appDescription}
                     </p>
                 </header>
 
-                <div className="mb-8 flex justify-center border-b border-brand-red-700">
-                    <button onClick={() => setActiveTab('editor')} className={`px-6 py-3 font-medium transition-colors duration-300 ${activeTab === 'editor' ? 'text-white border-b-2 border-white' : 'text-red-200 hover:text-white'}`}>{t.imageEditorTab}</button>
-                    <button onClick={() => setActiveTab('youtube')} className={`px-6 py-3 font-medium transition-colors duration-300 ${activeTab === 'youtube' ? 'text-white border-b-2 border-white' : 'text-red-200 hover:text-white'}`}>{t.youtubeCoverTab}</button>
-                    <button onClick={() => setActiveTab('audio')} className={`px-6 py-3 font-medium transition-colors duration-300 ${activeTab === 'audio' ? 'text-white border-b-2 border-white' : 'text-red-200 hover:text-white'}`}>{t.audioIdeaTab}</button>
+                <div className="mb-8 flex justify-center border-b border-slate-700">
+                    <button onClick={() => setActiveTab('editor')} className={`px-6 py-3 font-medium transition-colors duration-300 ${activeTab === 'editor' ? 'text-white border-b-2 border-white' : 'text-slate-200 hover:text-white'}`}>{t.imageEditorTab}</button>
+                    <button onClick={() => setActiveTab('youtube')} className={`px-6 py-3 font-medium transition-colors duration-300 ${activeTab === 'youtube' ? 'text-white border-b-2 border-white' : 'text-slate-200 hover:text-white'}`}>{t.youtubeCoverTab}</button>
+                    <button onClick={() => setActiveTab('audio')} className={`px-6 py-3 font-medium transition-colors duration-300 ${activeTab === 'audio' ? 'text-white border-b-2 border-white' : 'text-slate-200 hover:text-white'}`}>{t.audioIdeaTab}</button>
                 </div>
                 
-                {error && <div className="text-red-200 text-center mb-4 p-3 bg-brand-red-500/30 rounded-lg border border-red-400">{t.errorPrefix}: {error}</div>}
+                {error && <div className="text-slate-200 text-center mb-4 p-3 bg-slate-500/30 rounded-lg border border-slate-400">{t.errorPrefix}: {error}</div>}
 
                 {activeTab === 'editor' && renderEditor()}
                 {activeTab === 'youtube' && renderYoutubeGenerator()}

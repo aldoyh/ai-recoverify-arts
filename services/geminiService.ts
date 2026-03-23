@@ -1,6 +1,61 @@
 
 import { GoogleGenAI, Modality, LiveSession, Blob } from "@google/genai";
 
+// --- Redis Logging ---
+
+const REDIS_HOST = 'redis-14550.c239.us-east-1-2.ec2.cloud.redislabs.com';
+const REDIS_PORT = 14550; // Note: This is likely the TCP port. A REST API proxy may be on a different port.
+const REDIS_USERNAME = 'default';
+const REDIS_PASSWORD = 'pCqdOb9jELLcSqRTQgC3P01MeJvZnMOh';
+
+/**
+ * Logs a generation event to a Redis database via a presumed REST API.
+ * 
+ * @warning IMPORTANT SECURITY NOTICE:
+ * Storing database credentials in frontend code is highly insecure and exposes them to anyone
+ * who inspects the website's source code. This function should ONLY be used in a secure,
+ * non-public environment (e.g., an internal tool). For production applications, all database
+ * interactions MUST be handled by a secure backend server.
+ * 
+ * @assumption This function assumes the Redis instance has a REST API proxy
+ * that accepts commands via HTTP POST and uses Basic Authentication.
+ * For this to work from a browser, the proxy MUST be configured with proper CORS headers
+ * (e.g., `Access-Control-Allow-Origin`, `Access-Control-Allow-Headers: Authorization`).
+ */
+const logToRedis = async (logData: object): Promise<void> => {
+    const REDIS_API_URL = `https://${REDIS_HOST}:${REDIS_PORT}`; // Assumes HTTPS, adjust if needed.
+    const redisAuthToken = btoa(`${REDIS_USERNAME}:${REDIS_PASSWORD}`);
+
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        ...logData,
+    };
+
+    try {
+        const command = ['LPUSH', 'generation_logs', JSON.stringify(logEntry)];
+
+        const response = await fetch(REDIS_API_URL, {
+            method: 'POST',
+            body: JSON.stringify(command),
+            headers: {
+                'Authorization': `Basic ${redisAuthToken}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Redis API returned ${response.status}: ${errorText}`);
+        }
+        
+        console.log('Log event sent to Redis successfully.', logEntry);
+    } catch (error) {
+        // Log failures must not interrupt the application flow.
+        console.error('Failed to send log to Redis. This is not a fatal error.', { error, logEntry });
+    }
+};
+
+
 // --- Prompt Fetching and Caching ---
 const promptCache = new Map<string, string>();
 
@@ -113,8 +168,11 @@ export const editImageWithPrompt = async (
     imageFile: File,
     prompt: string
 ): Promise<string> => {
+    const input = { prompt, fileName: imageFile.name, fileType: imageFile.type, fileSize: imageFile.size };
+
     if (!process.env.API_KEY) {
         console.warn("API_KEY not found. Mocking Gemini API response for Image Editor.");
+        await logToRedis({ requestType: 'editImage', status: 'success', input, output: { mocked: true } });
         return mockEditedImageResponse();
     }
     
@@ -139,36 +197,23 @@ export const editImageWithPrompt = async (
             if (part.inlineData) {
                 const base64ImageBytes: string = part.inlineData.data;
                 const mimeType = part.inlineData.mimeType || 'image/png';
-                return `data:${mimeType};base64,${base64ImageBytes}`;
+                const imageUrl = `data:${mimeType};base64,${base64ImageBytes}`;
+                await logToRedis({ requestType: 'editImage', status: 'success', input, output: { imageUrl } });
+                return imageUrl;
             }
         }
         
         throw new Error("No image data found in Gemini response.");
 
     } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await logToRedis({ requestType: 'editImage', status: 'failure', input, error: errorMessage });
         console.error("Error calling Gemini API for image editing:", error);
         throw new Error("Failed to edit image. The API may be unavailable or the request may be invalid.");
     }
 };
 
 // --- YouTube Cover Generator Functions ---
-
-/**
- * Fetches transcript from a dedicated API.
- */
-const fetchTranscriptFromApi = async (videoId: string, lang: string): Promise<string | null> => {
-    try {
-        const apiUrl = `https://youtube-transcript-api.vercel.app/?video_id=${videoId}&lang=${lang}`;
-        const response = await fetch(apiUrl);
-        if (!response.ok) return null;
-        const data = await response.json();
-        return data.map((line: { text: string }) => line.text).join(' ');
-    } catch (e) {
-        console.error(`Failed to fetch transcript from API for lang=${lang}`, e);
-        return null;
-    }
-};
-
 
 /**
  * Fetches YouTube video details using a robust, multi-step process.
@@ -233,57 +278,50 @@ const fetchVideoDetails = async (videoId: string): Promise<{ title: string; desc
 
 
 /**
- * Fetches transcript and/or metadata for a YouTube video.
- * It attempts to fetch a transcript first, but reliably falls back to video details (title/description).
+ * Fetches YouTube video metadata directly.
+ * This approach avoids external transcript services and relies on the official
+ * video title and description as the source of "wisdom" for the AI.
  */
-export const fetchYouTubeTranscript = async (videoId: string): Promise<{ text: string; source: 'transcript' | 'metadata'; thumbnailUrl: string | null; }> => {
-    // Start fetching details and transcript in parallel
-    const detailsPromise = fetchVideoDetails(videoId);
-    
-    let transcript: string | null = null;
+export const fetchYouTubeTranscript = async (videoId: string): Promise<{ text: string; source: 'metadata'; thumbnailUrl: string | null; }> => {
+    const input = { videoId };
     try {
-        // Attempt to fetch transcript
-        transcript = await fetchTranscriptFromApi(videoId, 'ar');
-        if (!transcript) {
-            transcript = await fetchTranscriptFromApi(videoId, 'en');
+        const details = await fetchVideoDetails(videoId);
+
+        if (details && details.title) {
+            const content = details.description ? `${details.title}\n\n${details.description}` : details.title;
+            const thumbnailUrl = details.thumbnailUrl || null;
+            const output = { source: 'metadata', thumbnailUrl, title: details.title, description: details.description };
+            await logToRedis({ requestType: 'fetchYouTubeTranscript', status: 'success', input, output });
+            return { text: content, source: 'metadata', thumbnailUrl };
         }
-    } catch(e) {
-        console.warn("Transcript fetching failed entirely.", e);
-    }
-    
-    const details = await detailsPromise;
-    const thumbnailUrl = details?.thumbnailUrl || null;
 
-    // Prioritize transcript if available
-    if (transcript) {
-        return { text: transcript, source: 'transcript', thumbnailUrl };
+        throw new Error("Could not fetch video details. The video may be private or the URL invalid.");
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await logToRedis({ requestType: 'fetchYouTubeTranscript', status: 'failure', input, error: errorMessage });
+        throw error;
     }
-
-    // Fallback to video details if transcript fails
-    if (details && details.title) {
-        const content = details.description ? `${details.title}\n\n${details.description}` : details.title;
-        return { text: content, source: 'metadata', thumbnailUrl };
-    }
-
-    // If both fail, throw a comprehensive error
-    throw new Error("Could not fetch transcript or video details. The video may be private, have captions disabled, or the external fetching services may be temporarily unavailable.");
 };
 
 
-// Step 1: Summarize Transcript or Metadata with Gemini Pro
-export const summarizeTranscript = async (content: string, sourceType: 'transcript' | 'metadata'): Promise<string> => {
+// Step 1: Summarize Metadata with Gemini Pro
+export const summarizeTranscript = async (content: string): Promise<string> => {
     const ai = getAi();
-    const promptName = sourceType === 'transcript' ? 'summarize_transcript' : 'summarize_metadata';
-    const promptTemplate = await fetchPrompt(promptName);
+    const promptTemplate = await fetchPrompt('summarize_metadata');
     const promptContent = promptTemplate.replace('{content}', content);
+    const input = { model: 'gemini-2.5-pro', content };
 
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-pro',
             contents: promptContent,
         });
-        return response.text;
+        const summary = response.text;
+        await logToRedis({ requestType: 'summarizeTranscript', status: 'success', input, output: { summary } });
+        return summary;
     } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await logToRedis({ requestType: 'summarizeTranscript', status: 'failure', input, error: errorMessage });
         console.error("Error summarizing content:", error);
         throw new Error("Failed to summarize content with Gemini Pro.");
     }
@@ -293,6 +331,7 @@ export const summarizeTranscript = async (content: string, sourceType: 'transcri
 export const createImagePromptFromSummary = async (summary: string, useThumbnail: boolean): Promise<string> => {
     const ai = getAi();
     const promptTemplate = await fetchPrompt('create_image_prompt');
+    const input = { model: 'gemini-2.5-flash', summary, useThumbnail };
     
     const inspirationText = useThumbnail 
         ? '**Inspiration:** The new image should be inspired by the style and theme of the provided original thumbnail but be more dynamic and eye-catching.' 
@@ -307,8 +346,12 @@ export const createImagePromptFromSummary = async (summary: string, useThumbnail
             model: 'gemini-2.5-flash',
             contents: finalPrompt,
         });
-        return response.text;
+        const artPrompt = response.text;
+        await logToRedis({ requestType: 'createImagePromptFromSummary', status: 'success', input, output: { artPrompt } });
+        return artPrompt;
     } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await logToRedis({ requestType: 'createImagePromptFromSummary', status: 'failure', input, error: errorMessage });
         console.error("Error creating image prompt:", error);
         throw new Error("Failed to create image prompt with Gemini Flash.");
     }
@@ -316,6 +359,7 @@ export const createImagePromptFromSummary = async (summary: string, useThumbnail
 
 // Step 3: Generate Image (now supports single or multi-modal) with fallback
 export const generateImage = async (prompt: string, thumbnailUrl?: string | null): Promise<string> => {
+    const input = { prompt, thumbnailUrl };
     try {
         const ai = getAi();
         // Text + Image prompt using Gemini 2.5 Flash Image
@@ -339,7 +383,9 @@ export const generateImage = async (prompt: string, thumbnailUrl?: string | null
             for (const part of response.candidates[0].content.parts) {
                 if (part.inlineData) {
                     const base64ImageBytes: string = part.inlineData.data;
-                    return `data:${part.inlineData.mimeType || 'image/jpeg'};base64,${base64ImageBytes}`;
+                    const imageUrl = `data:${part.inlineData.mimeType || 'image/jpeg'};base64,${base64ImageBytes}`;
+                    await logToRedis({ requestType: 'generateImage', service: 'Gemini', status: 'success', input, output: { imageUrl } });
+                    return imageUrl;
                 }
             }
             throw new Error("No image data found in Gemini response.");
@@ -351,9 +397,16 @@ export const generateImage = async (prompt: string, thumbnailUrl?: string | null
              if (images.length === 0) {
                  throw new Error("Image generation returned no images.");
              }
+             // Logging is handled inside generateImagesFromPrompt
              return images[0];
         }
     } catch (geminiError) {
+        const geminiErrorMessage = geminiError instanceof Error ? geminiError.message : String(geminiError);
+        // Logging for the specific failure is handled inside generateImagesFromPrompt for text-only,
+        // so we only log here for the multimodal case.
+        if (thumbnailUrl) {
+            await logToRedis({ requestType: 'generateImage', service: 'Gemini', status: 'failure', input, error: geminiErrorMessage });
+        }
         console.warn("Gemini image generation failed, attempting fallback to Hugging Face.", geminiError);
         try {
             // Fallback is always text-to-image, ignoring the thumbnail if it was provided.
@@ -361,8 +414,12 @@ export const generateImage = async (prompt: string, thumbnailUrl?: string | null
             if (hfImages.length === 0) {
                 throw new Error("Hugging Face fallback returned no images.");
             }
-            return hfImages[0];
+            const imageUrl = hfImages[0];
+            await logToRedis({ requestType: 'generateImage', service: 'HuggingFace', status: 'success', input, output: { imageUrl } });
+            return imageUrl;
         } catch (hfError) {
+            const hfErrorMessage = hfError instanceof Error ? hfError.message : String(hfError);
+            await logToRedis({ requestType: 'generateImage', service: 'HuggingFace', status: 'failure', input, error: hfErrorMessage });
             console.error("Hugging Face fallback also failed.", hfError);
             throw new Error("Failed to generate cover image using both primary and fallback services.");
         }
@@ -402,20 +459,26 @@ export const startTranscription = async (onTranscriptUpdate: (transcriptPart: st
         console.warn("Transcription already in progress.");
         return;
     }
-
+    const input = { model: 'gemini-2.5-flash-native-audio-preview-09-2025' };
     const ai = getAi();
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         callbacks: {
-            onopen: () => console.log("Live session opened."),
+            onopen: () => {
+                console.log("Live session opened.");
+                logToRedis({ requestType: 'startTranscription', status: 'success', input });
+            },
             onmessage: (message) => {
                 if (message.serverContent?.inputTranscription) {
                     onTranscriptUpdate(message.serverContent.inputTranscription.text);
                 }
             },
-            onerror: (e) => console.error("Live session error:", e),
+            onerror: (e) => {
+                console.error("Live session error:", e);
+                logToRedis({ requestType: 'startTranscription', status: 'failure', input, error: e.type });
+            },
             onclose: () => console.log("Live session closed."),
         },
         config: {
@@ -448,7 +511,10 @@ export const stopTranscription = (): void => {
     source?.disconnect();
     inputAudioContext?.close();
 
-    sessionPromise?.then(session => session.close());
+    sessionPromise?.then(session => {
+        session.close();
+        logToRedis({ requestType: 'stopTranscription', status: 'success' });
+    });
 
     stream = null;
     scriptProcessor = null;
@@ -461,20 +527,26 @@ export const summarizeAudioTranscript = async (transcript: string): Promise<stri
     const ai = getAi();
     const promptTemplate = await fetchPrompt('summarize_audio');
     const promptContent = promptTemplate.replace('{content}', transcript);
+    const input = { model: 'gemini-2.5-pro', transcript };
 
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-pro',
             contents: promptContent,
         });
-        return response.text;
+        const summary = response.text;
+        await logToRedis({ requestType: 'summarizeAudioTranscript', status: 'success', input, output: { summary }});
+        return summary;
     } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await logToRedis({ requestType: 'summarizeAudioTranscript', status: 'failure', input, error: errorMessage });
         console.error("Error summarizing transcript:", error);
         throw new Error("Failed to summarize transcript with Gemini Pro.");
     }
 };
 
 export const generateImagesFromPrompt = async (prompt: string, count: number): Promise<string[]> => {
+    const input = { prompt, count };
     try {
         const ai = getAi();
         const response = await ai.models.generateImages({
@@ -486,12 +558,20 @@ export const generateImagesFromPrompt = async (prompt: string, count: number): P
                 aspectRatio: '16:9',
             },
         });
-        return response.generatedImages.map(img => `data:image/jpeg;base64,${img.image.imageBytes}`);
+        const imageUrls = response.generatedImages.map(img => `data:image/jpeg;base64,${img.image.imageBytes}`);
+        await logToRedis({ requestType: 'generateImagesFromPrompt', service: 'Gemini', status: 'success', input, output: { imageCount: imageUrls.length } });
+        return imageUrls;
     } catch (geminiError) {
+        const geminiErrorMessage = geminiError instanceof Error ? geminiError.message : String(geminiError);
+        await logToRedis({ requestType: 'generateImagesFromPrompt', service: 'Gemini', status: 'failure', input, error: geminiErrorMessage });
         console.warn("Gemini image generation failed, attempting fallback to Hugging Face.", geminiError);
         try {
-            return await generateImagesWithHuggingFace(prompt, count);
+            const hfImages = await generateImagesWithHuggingFace(prompt, count);
+            await logToRedis({ requestType: 'generateImagesFromPrompt', service: 'HuggingFace', status: 'success', input, output: { imageCount: hfImages.length } });
+            return hfImages;
         } catch (hfError) {
+             const hfErrorMessage = hfError instanceof Error ? hfError.message : String(hfError);
+             await logToRedis({ requestType: 'generateImagesFromPrompt', service: 'HuggingFace', status: 'failure', input, error: hfErrorMessage });
              console.error("Hugging Face fallback also failed.", hfError);
              throw new Error("Failed to generate images using both primary and fallback services.");
         }
