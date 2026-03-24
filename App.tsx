@@ -326,7 +326,7 @@ const App: React.FC = () => {
                             rows={4}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-white focus:border-white transition duration-200 placeholder-slate-200/50 text-white resize-none"
+                            className="w-full bg-brand-red-900 border border-brand-red-600 rounded-lg p-3 focus:ring-2 focus:ring-white focus:border-white transition duration-200 placeholder-red-200/50 text-white resize-none"
                             placeholder={t.editingPromptPlaceholder}
                             required
                         />
@@ -336,7 +336,7 @@ const App: React.FC = () => {
                 <button
                     type="submit"
                     disabled={isEditing || !imageFile || !prompt}
-                    className="w-full flex items-center justify-center bg-white hover:bg-slate-100 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 font-bold py-3 px-4 rounded-lg transition duration-300 shadow-lg disabled:shadow-none"
+                    className="w-full flex items-center justify-center bg-white hover:bg-red-50 disabled:bg-brand-red-700 disabled:text-red-300 disabled:cursor-not-allowed text-brand-red-700 font-bold py-3 px-4 rounded-lg transition duration-300 shadow-lg disabled:shadow-none"
                 >
                     {isEditing ? <LoadingSpinner text={t.loadingText} /> : t.generateEditButton}
                 </button>
