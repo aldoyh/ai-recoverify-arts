@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Modality, LiveSession, Blob } from "@google/genai";
+import { GoogleGenAI, Modality, Blob } from "@google/genai";
 
 // --- Prompt Fetching and Caching ---
 const promptCache = new Map<string, string>();
@@ -268,7 +268,7 @@ function createBlob(data: Float32Array): Blob {
   };
 }
 
-let sessionPromise: Promise<LiveSession> | null = null;
+let sessionPromise: ReturnType<GoogleGenAI['live']['connect']> | null = null;
 let inputAudioContext: AudioContext | null = null;
 let stream: MediaStream | null = null;
 let scriptProcessor: ScriptProcessorNode | null = null;
@@ -287,7 +287,7 @@ export const startTranscription = async (onTranscriptUpdate: (transcriptPart: st
         callbacks: {
             onopen: () => console.log("Live session opened."),
             onmessage: (message) => {
-                if (message.serverContent?.inputTranscription) {
+                if (message.serverContent?.inputTranscription?.text) {
                     onTranscriptUpdate(message.serverContent.inputTranscription.text);
                 }
             },
